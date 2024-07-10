@@ -1,5 +1,57 @@
 from web import *
+import gradio as gr
+import re
+import random
+from scipy.io.wavfile import write
 
+
+mdxnet_models = [
+    'UVR-MDX-NET-Inst_1.onnx',
+    'UVR-MDX-NET-Inst_2.onnx',
+    'UVR-MDX-NET-Inst_3.onnx',
+    'UVR_MDXNET_KARA.onnx',
+    'UVR_MDXNET_KARA_2.onnx',
+    'UVR_MDXNET_9482.onnx',
+    'UVR-MDX-NET-Voc_FT.onnx',
+    'Kim_Vocal_1.onnx',
+    'Kim_Vocal_2.onnx',
+    'Kim_Inst.onnx',
+    'Reverb_HQ_By_FoxJoy.onnx',
+    'UVR-MDX-NET_Crowd_HQ_1.onnx',
+
+]
+
+mdxnet_overlap_values = [
+    '0.25',
+    '0.5',
+    '0.75',
+    '0.99',
+]
+
+
+def mdxnet_separator(mdxnet_audio, mdxnet_model, mdxnet_output_format, mdxnet_segment_size, mdxnet_overlap, mdxnet_denoise):
+  files_list = []
+  files_list.clear()
+  directory = "./outputs"
+  random_id = str(random.randint(10000, 99999))
+  pattern = f"{random_id}"
+  os.makedirs("outputs", exist_ok=True)
+  write(f'{random_id}.wav', mdxnet_audio[0], mdxnet_audio[1])
+  prompt = f"audio-separator {random_id}.wav --model_filename {mdxnet_model} --output_dir=./outputs --output_format={mdxnet_output_format} --normalization=0.9 --mdx_segment_size={mdxnet_segment_size} --mdx_overlap={mdxnet_overlap}"
+  
+  if mdxnet_denoise:
+    prompt += " --mdx_enable_denoise"
+  
+  os.system(prompt)
+
+  for file in os.listdir(directory):
+    if re.search(pattern, file):
+      files_list.append(os.path.join(directory, file))
+
+  stem1_file = files_list[0]
+  stem2_file = files_list[1]
+
+  return stem1_file, stem2_file
 
 with gr.Blocks(title="RVC WebUI") as app:
     gr.Markdown("## RVC WebUI")
@@ -315,69 +367,52 @@ with gr.Blocks(title="RVC WebUI") as app:
                     ],
                     api_name="infer_change_voice",
                 )
-        with gr.TabItem(
-            i18n("Vocals/Accompaniment Separation & Reverberation Removal")
-        ):
-            gr.Markdown(
-                value=i18n(
-                    "Batch processing for vocal accompaniment separation using the UVR5 model.<br>Example of a valid folder path format: D:\\path\\to\\input\\folder (copy it from the file manager address bar).<br>The model is divided into three categories:<br>1. Preserve vocals: Choose this option for audio without harmonies. It preserves vocals better than HP5. It includes two built-in models: HP2 and HP3. HP3 may slightly leak accompaniment but preserves vocals slightly better than HP2.<br>2. Preserve main vocals only: Choose this option for audio with harmonies. It may weaken the main vocals. It includes one built-in model: HP5.<br>3. De-reverb and de-delay models (by FoxJoy):<br>  (1) MDX-Net: The best choice for stereo reverb removal but cannot remove mono reverb;<br>&emsp;(234) DeEcho: Removes delay effects. Aggressive mode removes more thoroughly than Normal mode. DeReverb additionally removes reverb and can remove mono reverb, but not very effectively for heavily reverberated high-frequency content.<br>De-reverb/de-delay notes:<br>1. The processing time for the DeEcho-DeReverb model is approximately twice as long as the other two DeEcho models.<br>2. The MDX-Net-Dereverb model is quite slow.<br>3. The recommended cleanest configuration is to apply MDX-Net first and then DeEcho-Aggressive."
-                )
-            )
-            with gr.Row():
-                with gr.Column():
-                    dir_wav_input = gr.Textbox(
-                        label=i18n(
-                            "Enter the path of the audio folder to be processed"
-                        ),
-                        placeholder="C:\\Users\\Desktop\\todo-songs",
-                    )
-                    wav_inputs = gr.File(
-                        file_count="multiple",
-                        label=i18n(
-                            "Multiple audio files can also be imported. If a folder path exists, this input is ignored."
-                        ),
-                    )
-                with gr.Column():
-                    model_choose = gr.Dropdown(label=i18n("Model"), choices=uvr5_names)
-                    agg = gr.Slider(
-                        minimum=0,
-                        maximum=20,
-                        step=1,
-                        label="人声提取激进程度",
-                        value=10,
-                        interactive=True,
-                        visible=False,  # 先不开放调整
-                    )
-                    opt_vocal_root = gr.Textbox(
-                        label=i18n("Specify the output folder for vocals"),
-                        value="opt",
-                    )
-                    opt_ins_root = gr.Textbox(
-                        label=i18n("Specify the output folder for accompaniment"),
-                        value="opt",
-                    )
-                    format0 = gr.Radio(
-                        label=i18n("Export file format"),
-                        choices=["wav", "flac", "mp3", "m4a"],
-                        value="flac",
-                        interactive=True,
-                    )
-                but2 = gr.Button(i18n("Convert"), variant="primary")
-                vc_output4 = gr.Textbox(label=i18n("Output information"))
-                but2.click(
-                    uvr,
-                    [
-                        model_choose,
-                        dir_wav_input,
-                        opt_vocal_root,
-                        wav_inputs,
-                        opt_ins_root,
-                        agg,
-                        format0,
-                    ],
-                    [vc_output4],
-                    api_name="uvr_convert",
-                )
+                with gr.TabItem("MDX-NET"):
+                    with gr.Row():
+                        mdxnet_model = gr.Dropdown(
+                            label = "Select the Model",
+                            choices = mdxnet_models,
+                            interactive = True
+                        )
+                        mdxnet_output_format = gr.Dropdown(
+                            label = "Select the Output Format",
+                            choices = output_format,
+                            interactive = True
+                        )
+                        with gr.Row():
+                            mdxnet_segment_size = gr.Slider(
+                                minimum = 32,
+                                maximum = 4000,
+                                step = 32,
+                                label = "Segment Size",
+                                info = "Larger consumes more resources, but may give better results.",
+                                value = 256,
+                                interactive = True
+                            )
+                            mdxnet_overlap = gr.Dropdown(
+                                label = "Overlap",
+                                choices = mdxnet_overlap_values,
+                                value = mdxnet_overlap_values[0],
+                                interactive = True
+                            )
+                            mdxnet_denoise = gr.Checkbox(
+                                label = "Denoise",
+                                info = "Enable denoising during separation.",
+                                value = True,
+                                interactive = True
+                            )
+                            with gr.Row():
+                                mdxnet_audio = gr.Audio(
+                                    label = "Input Audio",
+                                   type = "numpy",
+                                interactive = True
+                                )
+                                with gr.Row():
+                                    mdxnet_button = gr.Button("Separate!", variant = "primary")
+                                with gr.Row():
+                                    mdxnet_stem1 = gr.Audio(show_download_button = True,interactive = False,label = "Stem 1",type = "filepath")
+                                    mdxnet_stem2 = gr.Audio(show_download_button = True,interactive = False,label = "Stem 2",type = "filepath")
+                                    mdxnet_button.click(mdxnet_separator, [mdxnet_audio, mdxnet_model, mdxnet_output_format, mdxnet_segment_size, mdxnet_overlap, mdxnet_denoise], [mdxnet_stem1, mdxnet_stem2])
         with gr.TabItem(i18n("Train")):
             gr.Markdown(
                 value=i18n(
