@@ -11,7 +11,7 @@ if sys.platform == "darwin":
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
 from infer.modules.vc import VC, show_info, hash_similarity
-from infer.modules.uvr5.modules import uvr
+
 from infer.lib.train.process_ckpt import (
     change_info,
     extract_small_model,
@@ -135,8 +135,6 @@ else:
 gpus = "-".join([i[0] for i in gpu_infos])
 
 
-weight_root = os.getenv("weight_root")
-weight_uvr5_root = os.getenv("weight_uvr5_root")
 index_root = os.getenv("index_root")
 outside_index_root = os.getenv("outside_index_root")
 
